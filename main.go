@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -9,44 +8,56 @@ import (
 	"path"
 	"strings"
 
+	"github.com/docopt/docopt-go"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
-var username string
-var password string
-var remote string
-var port string
-var files string
+var Version = "development"
+var usage string
 
 func init() {
-	flag.StringVar(&username, "username", "", "Your username")
-	flag.StringVar(&password, "password", "", "Your password")
-	flag.StringVar(&remote, "remote", "sftp.contributor.adobestock.com", "The remote host. Usually this is 'sftp.contributor.adobestock.com'.")
-	flag.StringVar(&port, "port", "22", "Port of the remote host. Usually this is port 22")
-	flag.StringVar(&files, "files", "", "Comma separated list of files you'd like to upload")
+	usage = `stockuploader
+
+	Usage:
+	  stockuploader --username peter --password secret <file>...
+	  stockuploader --username peter --password secret [--remote hostname] <file>...
+	  stockuploader --username peter --password secret [--remote hostname] [--port 22] <file>...
+	  stockuploader (-v | --version)
+
+	  stockuploader (-h | --help)
+	
+	Arguments:
+	  <file>		One or multiple files you'd like to upload
+
+	Options:
+	  -h --help                   Show this screen.
+	  -v --version                Show version number.
+	  -u --username=<username>    Provide your Adobe username.
+	  -p --password=<password>    Provide your Adobe password.
+	  -r --remote=<host>          sFTP remote host [default: sftp.contributor.adobestock.com].
+	  -P --port=<port>            Remote port [default: 22].`
 }
 
 func main() {
-	flag.Parse()
-
-	remote = cleanHostname(remote)
-	filePaths := cleanFiles(files)
-
-	if username == "" {
-		log.Fatal("You need to provide a username: --username peter")
+	arguments, _ := docopt.ParseDoc(usage)
+	if arguments["--version"] == true {
+		print("Version: " + Version)
+		os.Exit(0)
 	}
 
-	if password == "" {
-		log.Fatal("You need to provide a password: --password secret")
-	}
+	remote := cleanHostname(arguments["--remote"].(string))
+	username := arguments["--username"].(string)
+	password := arguments["--password"].(string)
+	port := arguments["--port"].(string)
+	files := cleanFiles(arguments["<file>"].([]string))
 
 	conn, client := initiateSftpConnection(username, password, remote, port)
 	defer conn.Close()
 	defer client.Close()
 
 	// uploading files to sftp
-	for _, file := range filePaths {
+	for _, file := range files {
 		fmt.Println("File: ", file)
 		copyFile(client, file, path.Base(file))
 	}
@@ -101,13 +112,9 @@ func copyFile(client *sftp.Client, source string, target string) {
 }
 
 // Takes a comma separated string and returns a cleaned up slice
-func cleanFiles(files string) []string {
-	if files == "" {
-		return make([]string, 0)
-	}
+func cleanFiles(files []string) []string {
 	var cleanFileList []string
-	fileList := strings.Split(files, ",")
-	for _, file := range fileList {
+	for _, file := range files {
 		file = strings.TrimSpace(file)
 		if file != "" {
 			cleanFileList = append(cleanFileList, file)
