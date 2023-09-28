@@ -58,7 +58,6 @@ func main() {
 
 	// uploading files to sftp
 	for _, file := range files {
-		fmt.Println("File: ", file)
 		copyFile(client, file, path.Base(file))
 	}
 }
@@ -89,6 +88,7 @@ func initiateSftpConnection(user string, pass string, remote string, port string
 
 // Copies file to remote host
 func copyFile(client *sftp.Client, source string, target string) {
+	fmt.Print(source)
 	// Create destination file
 	dstFile, err := client.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 	//dstFile, err := client.Create(target)
@@ -108,7 +108,7 @@ func copyFile(client *sftp.Client, source string, target string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("copied bytes: %d\n", bytes)
+	fmt.Printf("\t\t(successful with %d bytes)\n", bytes)
 }
 
 // Takes a comma separated string and returns a cleaned up slice
