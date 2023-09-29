@@ -9,12 +9,20 @@ import (
 	"strings"
 
 	"github.com/docopt/docopt-go"
+	"github.com/mitchellh/ioprogress"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
 var Version = "development"
 var usage string
+
+type cliOutput int
+
+const (
+	NoOutput cliOutput = iota
+	Text
+)
 
 func init() {
 	usage = `stockuploader
@@ -58,7 +66,7 @@ func main() {
 
 	// uploading files to sftp
 	for _, file := range files {
-		copyFile(client, file, path.Base(file))
+		copyFile(client, file, path.Base(file), Text)
 	}
 }
 
@@ -87,11 +95,10 @@ func initiateSftpConnection(user string, pass string, remote string, port string
 }
 
 // Copies file to remote host
-func copyFile(client *sftp.Client, source string, target string) {
-	fmt.Print(source)
+func copyFile(client *sftp.Client, source string, target string, output cliOutput) {
+
 	// Create destination file
 	dstFile, err := client.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
-	//dstFile, err := client.Create(target)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -103,12 +110,31 @@ func copyFile(client *sftp.Client, source string, target string) {
 		log.Fatal(err)
 	}
 
-	// Copy file
-	bytes, err := io.Copy(dstFile, srcFile)
-	if err != nil {
-		log.Fatal(err)
+	switch output {
+	case Text:
+		fmt.Println(source)
+		sourceFileSize, err := srcFile.Stat()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		progressR := &ioprogress.Reader{
+			Reader: srcFile,
+			Size:   sourceFileSize.Size(),
+		}
+
+		// copy with progress
+		_, err = io.Copy(dstFile, progressR)
+		if err != nil {
+			log.Fatal(err)
+		}
+	default:
+		// copy silently
+		_, err = io.Copy(dstFile, srcFile)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-	fmt.Printf("\t\t(successful with %d bytes)\n", bytes)
 }
 
 // Takes a comma separated string and returns a cleaned up slice
