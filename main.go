@@ -28,7 +28,7 @@ func init() {
 	  stockuploader (-h | --help)
 	
 	Arguments:
-	  <file>		One or multiple files you'd like to upload
+	  <file>                      One or multiple files you'd like to upload
 
 	Options:
 	  -h --help                   Show this screen.
