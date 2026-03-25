@@ -3,11 +3,14 @@ package main
 import (
 	"fmt"
 	"io"
+	"errors"
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
+	tomlConfig "github.com/brejoc/stockuploader/tomlConfig"
 	"github.com/docopt/docopt-go"
 	"github.com/mitchellh/ioprogress"
 	"github.com/pkg/sftp"
@@ -16,6 +19,11 @@ import (
 
 var Version = "development"
 var usage string
+
+const (
+	defaultRemote = "sftp.contributor.adobestock.com"
+	defaultPort   = "22"
+)
 
 type cliOutput int
 
@@ -28,36 +36,56 @@ func init() {
 	usage = `stockuploader
 
 	Usage:
-	  stockuploader --username peter --password secret <file>...
-	  stockuploader --username peter --password secret [--remote hostname] <file>...
-	  stockuploader --username peter --password secret [--remote hostname] [--port 22] <file>...
+	  stockuploader [options] <file>...
 	  stockuploader (-v | --version)
-
 	  stockuploader (-h | --help)
-	
+
 	Arguments:
 	  <file>                      One or multiple files you'd like to upload
 
 	Options:
 	  -h --help                   Show this screen.
 	  -v --version                Show version number.
-	  -u --username=<username>    Provide your Adobe username.
-	  -p --password=<password>    Provide your Adobe password.
-	  -r --remote=<host>          sFTP remote host [default: sftp.contributor.adobestock.com].
-	  -P --port=<port>            Remote port [default: 22].`
+	  -c --config=<path>         Load username, password, and optional remote/port from TOML (overrides auto-detection).
+	  -u --username=<username>  Provide your Adobe username (overrides config).
+	  -p --password=<password>  Provide your Adobe password (overrides config).
+	  -r --remote=<host>        SFTP remote host (when omitted: config value, else Adobe Stock SFTP host).
+	  -P --port=<port>          Remote port (when omitted: config value, else 22).`
 }
 
 func main() {
-	arguments, _ := docopt.ParseDoc(usage)
+	arguments, err := docopt.ParseDoc(usage)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if arguments["--version"] == true {
 		print("Version: " + Version)
 		os.Exit(0)
 	}
 
-	remote := cleanHostname(arguments["--remote"].(string))
-	username := arguments["--username"].(string)
-	password := arguments["--password"].(string)
-	port := arguments["--port"].(string)
+	cfgPath := resolveConfigPath(arguments)
+	cfg, err := tomlConfig.Load(cfgPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	username := firstNonEmpty(strArg(arguments, "--username"), cfg.Username)
+	password := firstNonEmpty(strArg(arguments, "--password"), cfg.Password)
+	remote := firstNonEmpty(strArg(arguments, "--remote"), cfg.Remote)
+	if remote == "" {
+		remote = defaultRemote
+	}
+	remote = cleanHostname(remote)
+
+	port := firstNonEmpty(strArg(arguments, "--port"), cfg.Port)
+	if port == "" {
+		port = defaultPort
+	}
+
+	if username == "" || password == "" {
+		log.Fatal("username and password are required (use --username / --password and/or --config)")
+	}
+
 	files := cleanFiles(arguments["<file>"].([]string))
 
 	conn, client := initiateSftpConnection(username, password, remote, port)
@@ -68,6 +96,70 @@ func main() {
 	for _, file := range files {
 		copyFile(client, file, path.Base(file), Text)
 	}
+}
+
+func strArg(arguments map[string]interface{}, key string) string {
+	v, ok := arguments[key]
+	if !ok || v == nil || v == false {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// resolveConfigPath selects the TOML config file in this precedence order:
+// 1) --config=<path> (exactly as provided)
+// 2) ./stockuploader.toml
+// 3) ~/.config/stockuploader.toml
+// 4) ~/.stockuploader.toml
+// 5) /etc/stockuploader.toml
+func resolveConfigPath(arguments map[string]interface{}) string {
+	if p := strArg(arguments, "--config"); p != "" {
+		return p
+	}
+	return findFirstExistingDefaultConfig()
+}
+
+func findFirstExistingDefaultConfig() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
+
+	candidates := []string{
+		"./stockuploader.toml",
+	}
+	if home != "" {
+		candidates = append(candidates,
+			filepath.Join(home, ".config", "stockuploader.toml"),
+			filepath.Join(home, ".stockuploader.toml"),
+		)
+	}
+	candidates = append(candidates, "/etc/stockuploader.toml")
+
+	for _, p := range candidates {
+		_, statErr := os.Stat(p)
+		if statErr == nil {
+			return p
+		}
+		if errors.Is(statErr, os.ErrNotExist) {
+			continue
+		}
+		// Non "not-exist" errors (e.g. permission) should surface.
+		return p
+	}
+
+	return ""
 }
 
 func initiateSftpConnection(user string, pass string, remote string, port string) (*ssh.Client, *sftp.Client) {

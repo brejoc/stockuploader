@@ -1,0 +1,11 @@
+# Example configuration for stockuploader (--config example-config.toml).
+# Copy and adjust; do not commit real credentials.
+
+username = "your-adobe-username"
+password = "your-password"
+
+# Optional. Defaults to Adobe Stock SFTP if omitted.
+# remote = "sftp.contributor.adobestock.com"
+
+# Optional. Defaults to 22 if omitted.
+# port = "22"

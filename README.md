@@ -8,24 +8,40 @@ stockuploader allows you to upload images and video via command line to Adobe St
 stockuploader
 
         Usage:
-          stockuploader --username peter --password secret <file>...
-          stockuploader --username peter --password secret [--remote hostname] <file>...
-          stockuploader --username peter --password secret [--remote hostname] [--port 22] <file>...
+          stockuploader [options] <file>...
           stockuploader (-v | --version)
-
           stockuploader (-h | --help)
 
         Arguments:
-          <file>                One or multiple files you'd like to upload
+          <file>                      One or multiple files you'd like to upload
 
         Options:
           -h --help                   Show this screen.
           -v --version                Show version number.
-          -u --username=<username>    Provide your Adobe username.
-          -p --password=<password>    Provide your Adobe password.
-          -r --remote=<host>          sFTP remote host [default: sftp.contributor.adobestock.com].
-          -P --port=<port>            Remote port [default: 22].
+          -c --config=<path>         Load username, password, and optional remote/port from TOML (overrides auto-detection).
+          -u --username=<username>  Provide your Adobe username (overrides config).
+          -p --password=<password>  Provide your Adobe password (overrides config).
+          -r --remote=<host>        SFTP remote host (when omitted: config value, else Adobe Stock SFTP host).
+          -P --port=<port>          Remote port (when omitted: config value, else 22).
 ```
+
+### TOML config
+
+You can provide credentials via a TOML file with `--config=<path>`, or (if `--config` is omitted) stockuploader will auto-detect the first existing config file in this order:
+
+1. `./stockuploader.toml`
+2. `~/.config/stockuploader.toml`
+3. `~/.stockuploader.toml`
+4. `/etc/stockuploader.toml`
+
+The config supports these keys (as strings):
+
+- `username`
+- `password`
+- `remote` (optional)
+- `port` (optional)
+
+`--username` / `--password` override the values from the config; `--remote` / `--port` override `remote` / `port`.
 
 ## Installation
 
